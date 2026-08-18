@@ -1,0 +1,784 @@
+{
+  "name": "AI Job Intelligence Agent – V1",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 14
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        544,
+        0
+      ],
+      "id": "56da4fd4-96d2-49b1-912e-7f962ae46899",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "https://serpapi.com/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "engine",
+              "value": "google_jobs"
+            },
+            {
+              "name": "q",
+              "value": "={{ $json.q }}"
+            },
+            {
+              "name": "location",
+              "value": "Da Nang, Vietnam"
+            },
+            {
+              "name": "api_key",
+              "value": "YOUR_SERPAPI_API_KEY"
+            },
+            {
+              "name": "gl",
+              "value": "vn"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        960,
+        0
+      ],
+      "id": "49da1159-d0b8-4e27-a925-53ddaad3d53a",
+      "name": "Collect Jobs"
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputs = $input.all();\n\nconst results = [];\n\nfor (const item of inputs) {\n  const jobs = item.json.jobs_results || [];\n\n  for (const job of jobs) {\n    // Chỉ giữ job có đủ dữ liệu cơ bản để phân tích\n    if (\n      job.title &&\n      job.company_name &&\n      job.description &&\n      job.location\n    ) {\n      results.push({\n        json: {\n          title: job.title || '',\n          company: job.company_name || '',\n          location: job.location || '',\n          via: job.via || '',\n          description: job.description || '',\n          source_link: job.source_link || '',\n          share_link: job.share_link || '',\n          job_id: job.job_id || '',\n          apply_options: job.apply_options || [],\n          extensions: job.extensions || [],\n          detected_extensions: job.detected_extensions || []\n        }\n      });\n    }\n  }\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        0
+      ],
+      "id": "6e9195dd-0b78-46fa-90d8-25ad4aa75c10",
+      "name": "Filter Job Candidates"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a Job Description Extraction AI.\n\nExtract ONLY information from the job description provided below.\n\nDo not invent information.\n\nIf information is not available, return an empty string or empty array.\n\nJOB TITLE:\n{{ $json.title }}\n\nCOMPANY:\n{{ $json.company }}\n\nLOCATION:\n{{ $json.location }}\n\nSOURCE:\n{{ $json.via }}\n\nSOURCE URL:\n{{ $json.source_link }}\n\nJOB DESCRIPTION:\n{{ $json.description }}\n\nReturn ONLY valid JSON using exactly this structure:\n\n{\n  \"job_title\": \"\",\n  \"company\": \"\",\n  \"location\": \"\",\n  \"employment_type\": \"\",\n  \"experience_required\": \"\",\n  \"education_required\": \"\",\n  \"responsibilities\": [],\n  \"required_skills\": [],\n  \"preferred_skills\": [],\n  \"language_requirements\": [],\n  \"benefits\": [],\n  \"other_requirements\": \"\"\n}",
+        "hasOutputParser": true,
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        528,
+        272
+      ],
+      "id": "f083eaf9-17b4-463d-a19c-0afc6a73ca4a",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"job_title\": \"\",\n  \"company\": \"\",\n  \"location\": \"\",\n  \"employment_type\": \"\",\n  \"experience_required\": \"\",\n  \"education_required\": \"\",\n  \"responsibilities\": [],\n  \"required_skills\": [],\n  \"preferred_skills\": [],\n  \"language_requirements\": [],\n  \"benefits\": [],\n  \"other_requirements\": \"\"\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        672,
+        464
+      ],
+      "id": "5e56fc69-69eb-40da-b1ed-a2589f15d37f",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "jsCode": "const llmItems = $input.all();\nconst metadataItems = $('Prepare Job Metadata').all();\n\nreturn llmItems.map((item, index) => {\n  const job = item.json.output || item.json;\n  const metadata = metadataItems[index]?.json || {};\n\n  return {\n    json: {\n      job: {\n        job_title: job.job_title || '',\n        company: job.company || '',\n        location: job.location || '',\n        employment_type: job.employment_type || '',\n        experience_required: job.experience_required || '',\n        education_required: job.education_required || '',\n        responsibilities: job.responsibilities || [],\n        required_skills: job.required_skills || [],\n        preferred_skills: job.preferred_skills || [],\n        language_requirements: job.language_requirements || [],\n        benefits: job.benefits || [],\n        other_requirements: job.other_requirements || '',\n\n        source: metadata.job_source || '',\n        url: metadata.job_url || ''\n      }\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        272
+      ],
+      "id": "66c778df-1b81-4ff0-a8f7-d85d78da1497",
+      "name": "Prepare Job for Matching"
+    },
+    {
+      "parameters": {
+        "jsCode": "const jobs = $('Prepare Job for Matching').all();\nconst cv = $('Get Master CV').first().json;\n\nreturn jobs.map(item => {\n  return {\n    json: {\n      job: item.json.job,\n      master_cv: cv.master_cv || cv\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1312,
+        272
+      ],
+      "id": "06bc5b48-8498-4988-bc0b-7d4871950bcb",
+      "name": "Merge Job + Master CV"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a Job Matching AI.\n\nYour task is to evaluate how well the candidate's Master CV matches the actual job posting.\n\n==================================================\nCORE PRINCIPLES\n==================================================\n\n1. Use ONLY information explicitly provided in:\n   - The Job Posting\n   - The Candidate's Master CV\n\n2. NEVER invent, assume, or infer:\n   - skills\n   - responsibilities\n   - years of experience\n   - industry experience\n   - team size\n   - achievements\n   - education\n   - certifications\n   - language ability\n   - technical knowledge\n\n3. A job title alone is NEVER evidence of experience or skills.\n\n   Example:\n   If the job title is \"Operations Manager - Garment\",\n   do NOT assume the candidate lacks garment experience simply because\n   the CV does not mention garments.\n\n   Instead classify it as:\n   \"Not evidenced in CV\"\n\n4. Distinguish carefully between:\n\n   DIRECT MATCH\n   = The CV explicitly demonstrates substantially similar experience.\n\n   TRANSFERABLE MATCH\n   = The CV demonstrates related experience that can reasonably transfer\n     to the requirement, but it is not the same direct experience.\n\n   NOT EVIDENCED\n   = The job requires or prefers something, but the CV does not provide\n     enough evidence to confirm it.\n\n5. Missing evidence does NOT automatically mean the candidate lacks the skill.\n\n6. Do not penalize the candidate for requirements that the job posting\n   does not explicitly state.\n\n7. Prioritize:\n   - actual scope of responsibility\n   - operational complexity\n   - leadership scope\n   - team management\n   - cross-functional coordination\n   - KPI ownership\n   - process improvement\n   - business impact\n   - measurable achievements\n   - industry/domain experience\n\n   over simple keyword matching.\n\n8. Evaluate the actual job description, not the job title.\n\n==================================================\nMATCH EVALUATION\n==================================================\n\nEvaluate the following dimensions independently.\n\nA. EXPERIENCE AND SCOPE — 30 points\n\nEvaluate:\n- years and level of relevant experience\n- similarity of operational scope\n- complexity of responsibilities\n- scale of operations\n- cross-functional exposure\n- ownership level\n- measurable business impact\n\nGive higher scores when the CV demonstrates comparable or greater scope.\n\nDo NOT require identical industry experience if strong transferable\nexperience exists.\n\nB. REQUIRED SKILLS — 25 points\n\nEvaluate each explicitly required skill.\n\nFor each skill determine whether it is:\n- Direct Match\n- Transferable Match\n- Not Evidenced\n\nPrioritize the importance of the skill rather than counting keywords.\n\nC. RESPONSIBILITIES — 25 points\n\nCompare the actual responsibilities in the job posting against the\ncandidate's demonstrated responsibilities.\n\nFocus on:\n- ownership\n- decision making\n- operational management\n- stakeholder management\n- process improvement\n- KPI management\n- people leadership\n- execution\n\nD. SENIORITY AND LEADERSHIP — 10 points\n\nEvaluate:\n- leadership level\n- team management\n- decision authority\n- ownership\n- management scope\n- seniority\n\nDo not assume seniority from job titles alone.\n\nE. EDUCATION, LANGUAGE AND OTHER REQUIREMENTS — 10 points\n\nEvaluate only explicit requirements.\n\nIf the CV does not provide enough evidence:\nclassify as \"Not Evidenced in CV\".\n\nDo NOT automatically treat missing information as a failure unless\nthe requirement is clearly mandatory and there is no reasonable evidence.\n\n==================================================\nSCORING\n==================================================\n\nCalculate a final score from 0 to 100.\n\n90-100 = Exceptional Match\n80-89  = Strong Match\n70-79  = Good Match\n60-69  = Moderate Match\nBelow 60 = Weak Match\n\nThe score must reflect the actual quality of the match.\n\nDo NOT increase the score simply to justify an Apply recommendation.\n\nDo NOT decrease the score simply because the candidate lacks identical\nindustry experience when strong transferable experience exists.\n\n==================================================\nCRITICAL GAP RULE\n==================================================\n\nA requirement is a CRITICAL GAP only when ALL of the following are true:\n\n1. The job posting clearly states the requirement as mandatory.\n2. The requirement is materially important to performing the role.\n3. The Master CV provides no direct or reasonable transferable evidence.\n\nExamples of potential critical gaps:\n- Mandatory professional license\n- Mandatory certification\n- Mandatory language ability when explicitly required\n- Mandatory technical qualification\n- Mandatory minimum experience when clearly stated\n- Mandatory specialized expertise with no transferable evidence\n\nDo NOT classify these as critical gaps automatically:\n- different industry\n- different company size\n- different terminology\n- slightly different team size\n- preferred qualifications\n- missing information that is not explicitly required\n\n==================================================\nRECOMMENDATION\n==================================================\n\nDetermine the recommendation independently from the score.\n\nAPPLY:\n- Strong overall alignment\n- Relevant experience and scope are sufficient\n- No critical mandatory requirement is clearly missing\n- Candidate has strong direct or transferable evidence\n\nCONSIDER:\n- Reasonable overall alignment\n- Some meaningful gaps exist\n- Candidate has enough transferable experience to remain competitive\n- No decisive critical gap\n\nDO NOT APPLY:\n- A critical mandatory requirement is clearly missing\n- OR experience/scope is substantially below the role\n- OR the role is clearly outside the candidate's realistic profile\n\nImportant:\nA score alone must NOT determine the recommendation.\n\n==================================================\nTRANSFERABLE EXPERIENCE\n==================================================\n\nWhen direct experience is missing, evaluate whether experience from\nanother function, industry, or environment reasonably transfers.\n\nExamples:\n\nBPO Operations Management\n→ may transfer to general Operations Management\n\nKPI / SLA Management\n→ may transfer to performance-driven operational roles\n\nProcess Improvement\n→ may transfer to Operational Excellence\n\nCross-functional Project Management\n→ may transfer to Operations / Program Management\n\nTeam Leadership\n→ may transfer across industries\n\nHowever, do NOT claim direct domain expertise when the CV does not\nexplicitly demonstrate it.\n\nAlways label such experience as \"Transferable Match\".\n\n==================================================\nEVIDENCE STANDARD\n==================================================\n\nEvery important conclusion must be supported by evidence from the CV.\n\nStrong evidence includes:\n- explicit responsibility\n- explicit achievement\n- measurable result\n- team size\n- operational scope\n- named process\n- KPI ownership\n- project ownership\n- stakeholder responsibility\n\nWeak evidence includes:\n- job title alone\n- generic assumptions\n- inferred technical knowledge\n- assumed industry knowledge\n\n==================================================\nOUTPUT\n==================================================\n\nReturn ONLY valid JSON.\n\nUse exactly this structure:\n\n{\n  \"match_score\": 0,\n  \"match_level\": \"\",\n  \"recommendation\": \"\",\n  \"experience_match\": \"\",\n  \"matched_skills\": [],\n  \"transferable_skills\": [],\n  \"missing_or_not_evidenced\": [],\n  \"strongest_advantages\": [],\n  \"key_gaps_and_risks\": [],\n  \"score_explanation\": \"\"\n}\n\n==================================================\nOUTPUT FIELD DEFINITIONS\n==================================================\n\nmatch_score:\nInteger from 0 to 100.\n\nmatch_level:\nOne of:\n- Exceptional Match\n- Strong Match\n- Good Match\n- Moderate Match\n- Weak Match\n\nrecommendation:\nOne of:\n- Apply\n- Consider\n- Do Not Apply\n\nexperience_match:\nConcise explanation comparing the candidate's actual experience,\nscope, complexity and seniority with the role.\n\nmatched_skills:\nList of skills explicitly demonstrated in the CV that directly match\nthe job requirements.\n\ntransferable_skills:\nList of related skills or experience that can reasonably transfer\nto the role.\n\nmissing_or_not_evidenced:\nList of important requirements that are missing or not evidenced in\nthe CV.\n\nstrongest_advantages:\nList of the candidate's strongest advantages specifically for this job.\n\nkey_gaps_and_risks:\nList of the most important gaps or risks.\n\nscore_explanation:\nConcise explanation of why the final score was assigned.\nMention the strongest matching areas and the biggest gaps.\n\n==================================================\nJOB POSTING\n==================================================\n\nJOB POSTING:\n\n{{ JSON.stringify($json.job, null, 2) }}\n\n==================================================\nMASTER CV\n==================================================\n\n{{ $json.master_cv.content }}\n\n==================================================\nFINAL INSTRUCTION\n==================================================\n\nPerform a conservative, evidence-based comparison.\n\nDo not optimize the score to make the candidate look better.\n\nDo not reject the candidate merely because the industry is different.\n\nDo not assume missing information means the candidate lacks the ability.\n\nUse \"Not Evidenced in CV\" whenever the CV does not provide enough\nevidence.\n\nReturn ONLY the JSON object.\n```text\nOUTPUT RULES\n\nReturn ONLY a valid JSON object.\nDo NOT use markdown.\nDo NOT use ```json or ``` fences.\nDo NOT add explanations before or after the JSON.\nDo NOT include reasoning.\n\nThe response must start with { and end with }.",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1536,
+        272
+      ],
+      "id": "2ecbd1ac-6177-472a-8793-644eb1e144c1",
+      "name": "AI Match Job vs CV"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "AI Job Intelligence Assistant",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Trang tính1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "date_found",
+              "displayName": "date_found",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "job_title",
+              "displayName": "job_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "location",
+              "displayName": "location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "employment_type",
+              "displayName": "employment_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "match_score",
+              "displayName": "match_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "match_level",
+              "displayName": "match_level",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "recommendation",
+              "displayName": "recommendation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "matched_skills",
+              "displayName": "matched_skills",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "missing_skills",
+              "displayName": "missing_skills",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "source_job_id",
+              "displayName": "source_job_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "dedup_key",
+              "displayName": "dedup_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "experience_match",
+              "displayName": "experience_match",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "transferable_skills",
+              "displayName": "transferable_skills",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "critical_gaps",
+              "displayName": "critical_gaps",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "strengths",
+              "displayName": "strengths",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "gaps",
+              "displayName": "gaps",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "reasoning",
+              "displayName": "reasoning",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2176,
+        272
+      ],
+      "id": "c5f9e2c1-70eb-4783-b2ab-0e6fbcb3e91d",
+      "name": "Save Job Results"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.map(item => {\n  const result = item.json;\n\n  return {\n    json: {\n      date_found: new Date().toISOString(),\n\n      job_title: result.job_title || '',\n      company: result.company || '',\n      location: result.location || '',\n      employment_type: result.employment_type || '',\n\n      source: result.source || '',\n      url: result.url || '',\n\n      match_score: result.match_score ?? '',\n      match_level: result.match_level || '',\n      recommendation: result.recommendation || '',\n\n      experience_match: result.experience_match || '',\n\n      matched_skills: Array.isArray(result.matched_skills)\n        ? result.matched_skills.join('; ')\n        : '',\n\n      missing_skills: Array.isArray(result.missing_skills)\n        ? result.missing_skills.join('; ')\n        : '',\n\n      transferable_skills: Array.isArray(result.transferable_skills)\n        ? result.transferable_skills.join('; ')\n        : '',\n\n      status: result.recommendation === 'Apply'\n        ? 'New'\n        : 'Reviewed',\n\n      source_job_id: result.source_job_id || '',\n      dedup_key: result.dedup_key || ''\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        272
+      ],
+      "id": "ef7bfc00-30ed-4f6d-8724-69ad666b837a",
+      "name": "Prepare Sheet Row"
+    },
+    {
+      "parameters": {
+        "maxItems": 5
+      },
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        2144,
+        0
+      ],
+      "id": "dd26e57f-322b-4f7d-a258-7e456678e3e8",
+      "name": "Limit"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.map(item => {\n  const job = item.json;\n\n  return {\n    json: {\n      title: job.title || '',\n      company: job.company || '',\n      location: job.location || '',\n      description: job.description || '',\n      source_link: job.source_link || '',\n      share_link: job.share_link || '',\n      job_id: job.job_id || '',\n      via: job.via || '',\n      job_url: job.source_link || '',\n      job_source: job.via || ''\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1328,
+        0
+      ],
+      "id": "03ad7dff-3493-4ab8-b326-b00714f9d643",
+      "name": "Prepare Job Metadata"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.map(item => {\n  const job = item.json;\n\n  const normalize = (value) =>\n    String(value || '')\n      .toLowerCase()\n      .trim()\n      .replace(/\\s+/g, ' ');\n\n  // Extract Indeed job ID directly from URL\n  let sourceJobId = '';\n\n  const jobUrl = String(job.job_url || job.source_link || '');\n\n  const indeedMatch = jobUrl.match(/[?&]jk=([^&#]+)/i);\n\n  if (indeedMatch) {\n    sourceJobId = indeedMatch[1];\n  }\n\n  // Fallback key if no source-specific job ID is available\n  const fallbackKey = [\n    normalize(job.job_source),\n    normalize(job.title),\n    normalize(job.company),\n    normalize(job.location)\n  ].join('|');\n\n  const dedupKey = sourceJobId\n    ? `${normalize(job.job_source)}|${sourceJobId}`\n    : fallbackKey;\n\n  return {\n    json: {\n      ...job,\n      source_job_id: sourceJobId,\n      dedup_key: dedupKey\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        0
+      ],
+      "id": "1ef88f53-bbe6-4260-a634-5b32913ae319",
+      "name": "Create Job Dedup Key"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "AI Job Intelligence Assistant",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Trang tính1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1712,
+        0
+      ],
+      "id": "1f437b77-bf68-4c98-945c-4709ea13b871",
+      "name": "Get Existing Jobs",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const existingItems = $input.all();\nconst newItems = $('Create Job Dedup Key').all();\n\nconst normalize = (value) =>\n  String(value ?? '')\n    .trim()\n    .toLowerCase();\n\nconst existingKeys = new Set();\nconst existingSourceIds = new Set();\n\nfor (const item of existingItems) {\n  const key = normalize(item.json.dedup_key);\n  const sourceId = normalize(item.json.source_job_id);\n\n  if (key) {\n    existingKeys.add(key);\n  }\n\n  if (sourceId) {\n    existingSourceIds.add(sourceId);\n  }\n}\n\nconst newJobs = [];\n\nfor (const item of newItems) {\n  const job = item.json;\n\n  const dedupKey = normalize(job.dedup_key);\n  const sourceJobId = normalize(job.source_job_id);\n\n  const duplicateByKey =\n    dedupKey && existingKeys.has(dedupKey);\n\n  const duplicateBySourceId =\n    sourceJobId && existingSourceIds.has(sourceJobId);\n\n  if (duplicateByKey || duplicateBySourceId) {\n    continue;\n  }\n\n  newJobs.push(item);\n}\n\nreturn newJobs;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        0
+      ],
+      "id": "e084e971-0f08-4aba-afa1-72762d202fd8",
+      "name": "Filter Duplicate Jobs"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst jobs = $('Limit').all();\n\nreturn items.map((item, index) => {\n  const raw =\n    item.json.text ??\n    item.json.output ??\n    item.json.response?.generations?.[0]?.[0]?.text ??\n    '';\n\n  if (!raw) {\n    throw new Error(`AI returned empty text for item ${index}`);\n  }\n\n  const cleaned = raw\n    .replace(/^```json\\s*/i, '')\n    .replace(/^```\\s*/i, '')\n    .replace(/\\s*```$/i, '')\n    .trim();\n\n  let result;\n\n  try {\n    result = JSON.parse(cleaned);\n  } catch (error) {\n    throw new Error(`Invalid JSON for item ${index}:\\n${cleaned}`);\n  }\n\n  // IMPORTANT:\n  // Match AI result with the exact job entering the AI node\n  const job = jobs[index]?.json || {};\n\n  return {\n    json: {\n      ...result,\n\n      job_title: job.job_title || job.title || '',\n      company: job.company || '',\n      location: job.location || '',\n      employment_type: job.employment_type || '',\n\n      source: job.source || job.job_source || '',\n      url: job.url || job.job_url || job.source_link || '',\n\n      source_job_id:\n        job.source_job_id ||\n        job.job_id ||\n        '',\n\n      dedup_key: job.dedup_key || ''\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1824,
+        272
+      ],
+      "id": "abe6798c-49b7-4721-bd6c-b6b97632264d",
+      "name": "Parse AI Match JSON"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "documentURL": "https://docs.google.com/document/d/YOUR_GOOGLE_DOC_ID/edit"
+      },
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        272
+      ],
+      "id": "4b7eed68-516c-4ccc-a74c-e4c307ee8aec",
+      "name": "Get Master CV"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        528,
+        464
+      ],
+      "id": "0886b3a9-b45c-442d-8e18-427bb83ec97a",
+      "name": "OpenAI Chat Model"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1536,
+        480
+      ],
+      "id": "d4ed69d7-88b9-4154-b3fd-e0c0c284c409",
+      "name": "OpenAI Chat Model1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const queries = [\n  // BUSINESS / STRATEGY\n  \"Business Operations Manager jobs Da Nang\",\n  \"Strategy and Operations Manager jobs Da Nang\",\n  \"Business Transformation Manager jobs Da Nang\",\n  \"Business Development Manager jobs Da Nang\",\n  \"Business Development Lead jobs Da Nang\",\n  \"Strategy Manager jobs Da Nang\",\n\n  // LEADERSHIP\n  \"Business Unit Manager jobs Da Nang\",\n  \"Business Manager jobs Da Nang\",\n  \"General Manager jobs Da Nang\",\n  \"Operations Director jobs Da Nang\",\n  \"Department Head jobs Da Nang\",\n\n  // OPERATIONS\n  \"Operations Manager jobs Da Nang\",\n  \"Operations Lead jobs Da Nang\",\n  \"Operational Excellence jobs Da Nang\",\n  \"Operations Efficiency jobs Da Nang\"\n];\n\nreturn queries.map(q => ({\n  json: {\n    q\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        0
+      ],
+      "id": "5bd431a0-74bf-42c0-a0a6-3459426d012a",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Jobs": {
+      "main": [
+        [
+          {
+            "node": "Filter Job Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Job Candidates": {
+      "main": [
+        [
+          {
+            "node": "Prepare Job Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Prepare Job for Matching",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Job for Matching": {
+      "main": [
+        [
+          {
+            "node": "Get Master CV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Job + Master CV": {
+      "main": [
+        [
+          {
+            "node": "AI Match Job vs CV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Match Job vs CV": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Match JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Sheet Row": {
+      "main": [
+        [
+          {
+            "node": "Save Job Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Job Metadata": {
+      "main": [
+        [
+          {
+            "node": "Create Job Dedup Key",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Job Dedup Key": {
+      "main": [
+        [
+          {
+            "node": "Get Existing Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Existing Jobs": {
+      "main": [
+        [
+          {
+            "node": "Filter Duplicate Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Duplicate Jobs": {
+      "main": [
+        [
+          {
+            "node": "Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Match JSON": {
+      "main": [
+        [
+          {
+            "node": "Prepare Sheet Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Master CV": {
+      "main": [
+        [
+          {
+            "node": "Merge Job + Master CV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Match Job vs CV",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Collect Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "nodeGroups": [],
+  "tags": []
+}
